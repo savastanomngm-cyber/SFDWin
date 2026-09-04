@@ -1,15 +1,15 @@
 """
 SFD Chart Terminal — FastAPI server
-(v4 + WALL INTERPRETER v1 + OI ANCHOR v2 + FLIP SANITY + REAL-TIME SENTINEL v4).
+(v4 + WALL INTERPRETER v1 + OI ANCHOR v2 + FLIP SANITY + REAL-TIME SENTINEL v4
+    + QQQ FOOTPRINT LENS).
 🟢 INTERPRETER:  /api/interpreter + /api/interpreter_stream + /api/interpreter_test
 🟢 OI ANCHOR v2: EOD-OI anchored walls + geometry guards + /api/oi_anchor
 🟢 FLIP SANITY:  _sanitize_walls() — nearest-to-spot zero-crossing + zone re-derive
 🟢 RT SENTINEL:  _fresh_spot() v4 — LADDER-FIRST (same feed as chart) → Tradovate →
                  TV scanner (corrected payload, NASDAQ:NDX) → stale kill switch
 🟢 SYNC FIX:     sentinel always tracks 24h futures ladder; distances vs translated walls
+🟢 QQQ LENS:     /api/qqq_map — live k=QQQ/NDX, all walls mapped to QQQ footprint prices
 """
-from dotenv import load_dotenv
-load_dotenv()   # reads .env from the folder you run the command in
 import time, math, asyncio, threading, traceback, functools, json
 import urllib.request
 from pathlib import Path
@@ -46,6 +46,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 _cache = {}
 _chain_cache = {}
 _chain_fetch_lock = threading.Lock()
+_LAST_WALLS = {}   # 🟢 QQQ lens reads the most recent walls per root
 
 def _fetch_chain_once(symbol, ttl=60):
     now = time.time()
@@ -119,7 +120,6 @@ def _fetch_futures_spot(asset):
 # ──  FRESH-SPOT LAYER v4: ladder-first, corrected scanner, stale-safe ──
 SPOT_META = {"age": None, "src": None, "stale_warned": False}
 
-# Real-time proxies. NASDAQ:NDX confirmed working on /america/ scanner.
 _RT_PROXY = {
     "NQ": ["NASDAQ:NDX", "TVC:NDX", "INDEX:NDX"],
     "ES": ["NASDAQ:SPX", "TVC:INX", "INDEX:SPX", "OANDA:SPX500"],
@@ -493,6 +493,41 @@ def _iv_grid(chain):
         grid.append(row)
     return {"strikes": strikes, "dtes": dtes, "iv_grid": grid, "spot": chain.spot}
 
+# ── 🟢 QQQ FOOTPRINT LENS (NQ levels → QQQ prices) ───────────
+_qqq_cache = {"ts": 0.0, "k": None, "qqq": None, "ndx": None}
+
+def _qqq_k():
+    """k = QQQ / NDX (live). Cached 30s. Returns (k, qqq, ndx, ts)."""
+    now = time.time()
+    if _qqq_cache["k"] and now - _qqq_cache["ts"] < 30:
+        return _qqq_cache["k"], _qqq_cache["qqq"], _qqq_cache["ndx"], _qqq_cache["ts"]
+    try:
+        q = None
+        try:
+            from .data.alpaca_feed import get_realtime_equity_bars
+            bars = get_realtime_equity_bars("QQQ", "1m")
+            if bars: q = float(bars[-1]["close"])
+        except Exception: pass
+        if q is None:
+            import yfinance as yf
+            q = float(yf.Ticker("QQQ").fast_info["last_price"])
+        ndx = None
+        try:
+            from .data.spot import get_spot
+            r = get_spot(get_asset("NDX"), "index")
+            if r and r.get("price"): ndx = float(r["price"])
+        except Exception: pass
+        if ndx is None:
+            import yfinance as yf
+            try: ndx = float(yf.Ticker("^NDX").fast_info["last_price"])
+            except Exception: ndx = None
+        if q and ndx:
+            k = q / ndx
+            _qqq_cache.update(ts=now, k=k, qqq=q, ndx=ndx)
+            return k, q, ndx, now
+    except Exception: pass
+    return _qqq_cache["k"], _qqq_cache["qqq"], _qqq_cache["ndx"], _qqq_cache["ts"]
+
 # ═════════════════════ ROUTES ═════════════════════
 @app.get("/")
 async def index(): return FileResponse(WEB / "index.html")
@@ -641,6 +676,37 @@ def live_spot_api(symbol: str = None, kind: str = "futures"):
     return {"price": px, "age": round(age, 1) if age is not None else None,
             "src": src, "ts": time.time(), "kind": kind}
 
+@app.get("/api/qqq_map")
+@endpoint_wrapper
+def qqq_map(symbol: str = None):
+    """🟢 FOOTPRINT LENS: maps every NDX-space level to a QQQ price.
+    Read your QQQ footprint at these prices ± band (rounding + basis drift)."""
+    asset = _resolve(symbol)
+    k, q, ndx, ts = _qqq_k()
+    out = {"k": round(k, 6) if k else None, "R": round(1 / k, 2) if k else None,
+           "qqq": q, "ndx": ndx, "ts": ts, "band": 0.05,
+           "note": "walls are NDX index-space; QQQ level = level × k; NQ level = QQQ / k"}
+    g = _LAST_WALLS.get(asset["options_root"])
+    if g and k:
+        def m(v): return round(v * k, 2) if v else None
+        out["levels"] = {
+            "put_wall":  m(g.get("put_wall")),
+            "call_wall": m(g.get("call_wall")),
+            "flip":      m(g.get("flip_point")),
+            "put_wall_fut":  m(g.get("put_wall")),    # (fut − basis) × k == raw × k
+            "call_wall_fut": m(g.get("call_wall")),
+            "put_0dte":  m(g.get("put_wall_0dte")),
+            "call_0dte": m(g.get("call_wall_0dte")),
+        }
+        try:
+            chain = _get_chain_cached_sync(asset["options_root"], ttl=240)
+            surf = analyze_surface(chain, chain.spot)
+            tcl = (surf or {}).get("top_convexity_levels") or []
+            out["levels"]["range_high"] = m(tcl[0]) if len(tcl) > 0 else None
+            out["levels"]["range_low"] = m(tcl[1]) if len(tcl) > 1 else None
+        except Exception: pass
+    return out
+
 @app.get("/api/walls")
 @endpoint_wrapper
 def walls(symbol: str = None):
@@ -760,6 +826,7 @@ def walls(symbol: str = None):
                 g["oi_anchor_rows"] = st.get("n_rows", 0)
                 g["oi_anchor_stale"] = st.get("stale", False)
             except Exception: pass
+        _LAST_WALLS[asset["options_root"]] = g   # 🟢 feeds the QQQ lens
         if bus:
             try:
                 bus.publish(bus.channel(bus.CH_WALLS, asset["options_root"]), g, last_ttl=120)
@@ -1213,7 +1280,6 @@ def execute(payload: dict):
     symbol = payload.get("symbol", "QQQ")
     if not ticket: return {"status": "error", "reason": "No ticket provided"}
     return execute_ticket(ticket, symbol)
-
 
 store.init()
 
