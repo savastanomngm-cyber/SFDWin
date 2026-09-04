@@ -1,0 +1,81 @@
+# ═══════════════════════════════════════════════════════════════
+# SKIA FLOW DESK (SFD) — flowdesk.yaml  (FULLY PATCHED)
+# Versioned config: edit + restart, no code changes needed.
+# ═══════════════════════════════════════════════════════════════
+
+# Asset the CLI/web terminal defaults to when none is passed.
+active_asset: SPX
+
+# ───────────────────────────────────────────────────────────────
+# SETTINGS — read by ticket builder, pipeline, calendar, CLI
+# ───────────────────────────────────────────────────────────────
+settings:
+
+  # --- Deterministic ticket math (Principle 2: math disposes) ---
+  stop_ticks: 40            # suffocating stop (30-50 ticks per transcript)
+  scale_out_ticks: 60       # T1 scale-out distance (1.5R at 40t stop)
+  runner_r: 5.0             # fallback runner multiple when no wall target
+  max_runner_r: 20.0        # hard cap on runner R
+  stock_stop_pct: 0.005     # single-stock stop (0.5%) — no tick grid
+
+  # --- AI gate ---
+  min_confidence: 0.5       # below this the Judge must abstain -> WAIT
+
+  # --- Environment guardrails ---
+  skip_opex: true           # blackout on OPEX / triple-witching / VIX-exp
+
+  # --- Sentinel (multi-asset watch) ---
+  # watchlist = assets the CLI Sentinel watches in one loop.
+  # The launched asset is auto-prepended if missing.
+  watchlist: [SPX, NDX]
+
+  # --- Basis guard (index -> futures translation safety) ---
+  # 1. overrides win (manual, per-session)
+  # 2. live basis trusted only inside [min_frac, max_frac] of spot
+  # 3. else fair-value estimate, badged EST (never silent)
+  basis_guard:
+    enabled: true
+    min_frac: -0.0015       # live basis below -0.15% of spot = suspect
+    max_frac: 0.012         # live basis above +1.2% of spot = suspect
+    overrides:              # OPTIONAL: pin today's observed basis (points).
+      # NDX: 123            # <- uncomment + set ONLY for the current session
+      # SPX: 12             #    (basis decays daily; don't leave pinned)
+
+  # --- Sentinel timing (defaults live in code; shown for reference) ---
+  # proximity_pct: 0.003        # ±0.3% arms the precursor
+  # confirm_window_secs: 480    # 8 min to confirm after touch
+  # poll_secs: 15               # watch loop cadence
+  # wall_refresh_secs: 300      # re-sync walls every 5 min
+  # post_signal_cooldown_secs: 600
+
+# ───────────────────────────────────────────────────────────────
+# ASSETS — options root, tape proxy, tradeable future, options mult.
+# Index rows: analyze options on the index, execute on the future.
+# Single-stock rows: futures == options_root (stock mode, % stops).
+# ───────────────────────────────────────────────────────────────
+assets:
+  # Indices (the F1 cars)
+  SPX:  { options_root: SPX,  tape_proxy: SPY,  futures: ES,   multiplier: 100 }
+  NDX:  { options_root: NDX,  tape_proxy: QQQ,  futures: NQ,   multiplier: 100 }
+  RUT:  { options_root: RUT,  tape_proxy: IWM,  futures: RTY,  multiplier: 100 }
+  VIX:  { options_root: VIX,  tape_proxy: VIX,  futures: VX,   multiplier: 100 }
+
+  # Mega-cap single stocks (stock mode)
+  NVDA: { options_root: NVDA, tape_proxy: NVDA, futures: NVDA, multiplier: 100 }
+  TSLA: { options_root: TSLA, tape_proxy: TSLA, futures: TSLA, multiplier: 100 }
+  AAPL: { options_root: AAPL, tape_proxy: AAPL, futures: AAPL, multiplier: 100 }
+
+  # Sector ETFs (macro rotations, no single-stock earnings risk)
+  SMH:  { options_root: SMH,  tape_proxy: SMH,  futures: SMH,  multiplier: 100 }
+  XLE:  { options_root: XLE,  tape_proxy: XLE,  futures: XLE,  multiplier: 100 }
+  XLF:  { options_root: XLF,  tape_proxy: XLF,  futures: XLF,  multiplier: 100 }
+
+# ───────────────────────────────────────────────────────────────
+# NOTES
+# - Telegram / macOS alerts read secrets from .env, NOT this file:
+#     TELEGRAM_BOT_TOKEN=...   TELEGRAM_CHAT_ID=...
+# - LLM providers (nous/groq/gemini) + keys live in .env as well.
+# - Keep basis_guard.overrides commented unless you are manually
+#   pinning the current session's observed basis; otherwise the
+#   guard auto-selects live-basis (if sane) or fair-value (EST).
+# ═══════════════════════════════════════════════════════════════

@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SFD Chart Terminal</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--txt:#c9d1d9;--dim:#8b949e;
+        --green:#26a69a;--red:#ef5350;--amber:#e3b341}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  header h1{font-size:16px;color:#fff}
+  select,button{background:#21262d;color:var(--txt);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button.danger{background:#da3633;border-color:#f85149;font-weight:600}
+  .badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border)}
+  .badge.green{color:var(--green);border-color:var(--green)} .badge.red{color:var(--red);border-color:var(--red)}
+  .badge.amber{color:var(--amber);border-color:var(--amber)} .badge.blue{color:#58a6ff;border-color:#58a6ff}
+  .tabbar{display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 16px}
+  .tab-btn{padding:10px 20px;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer;
+           border-bottom:2px solid transparent;transition:all .2s}
+  .tab-btn:hover{color:var(--txt)}
+  .tab-btn.active{color:#58a6ff;border-bottom-color:#58a6ff}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+  .grid{display:grid;gap:12px;padding:12px}
+  .grid.top{grid-template-columns:3fr 2fr}
+  .grid.mid{grid-template-columns:1fr 1fr}
+  .grid.three{grid-template-columns:1fr 1fr 1fr}
+  .grid.full{grid-template-columns:1fr}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative}
+  .panel h3{font-size:12px;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  #chartWrap{height:560px;position:relative}
+  #gexWrap{height:560px;position:relative}
+  .gex-tools{position:absolute;top:8px;right:8px;z-index:6;display:flex;gap:8px;align-items:center}
+  .gex-hint{font-size:10px;color:var(--dim)}
+  .gex-tools button{padding:3px 8px;font-size:11px}
+  #playbook{max-height:430px;overflow:auto}
+  #volSurface3d{height:400px;width:100%}
+  .surf-tools{position:absolute;top:8px;right:8px;z-index:6;display:flex;gap:6px}
+  .surf-tools button{padding:3px 8px;font-size:11px}
+  .surf-help{position:absolute;top:34px;left:12px;right:12px;z-index:7;background:rgba(13,17,23,.96);
+    border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:11px;line-height:1.6}
+  .surf-help b{color:var(--amber)}
+  .surf-narr{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
+  .basis-bar{display:flex;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .basis-card{display:flex;flex-direction:column;gap:2px;background:var(--panel);
+    border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;min-width:220px}
+  .basis-card b{font-size:12px}
+  .basis-card .dim{color:var(--dim)}
+  .cx-badge{position:absolute;top:8px;right:70px;z-index:6;font-size:11px;font-weight:700;
+    color:#39c5cf;border:1px solid #39c5cf;background:rgba(13,17,23,.85);
+    border-radius:6px;padding:4px 9px;letter-spacing:.4px}
+  .cx-badge.hot{color:#58a6ff;border-color:#58a6ff}
+  .kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1c2129;gap:8px}
+  .kv span:first-child{color:var(--dim)} .kv span:last-child{font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #1c2129}
+  th{color:var(--dim);font-weight:600}
+  .pos{color:var(--green)} .neg{color:var(--red)} .flat{color:var(--amber)}
+  #tooltip{position:absolute;display:none;pointer-events:none;z-index:10;background:rgba(22,27,34,.95);
+           border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;line-height:1.5;min-width:170px}
+  #legend{position:absolute;top:8px;left:8px;z-index:5;font-size:11px;background:rgba(22,27,34,.8);
+          border:1px solid var(--border);border-radius:6px;padding:6px 8px}
+  .foot{padding:8px 16px;color:var(--dim);font-size:11px}
+  .prov{font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-left:6px}
+  #error{display:none;background:#4a0a0a;color:#ff9999;padding:10px 16px;border-bottom:2px solid #ef5350;font-family:monospace;white-space:pre-wrap}
+  .pb-headline{font-size:12px;font-weight:700;color:#fff;margin-bottom:10px;padding:6px 8px;
+    background:#1c2129;border-radius:6px;border-left:3px solid var(--amber)}
+  .pb-steps,.sent-steps{display:flex;align-items:center;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+  .pb-step{padding:3px 8px;border-radius:12px;font-size:10px;font-weight:700;
+    background:#21262d;color:var(--dim);border:1px solid var(--border)}
+  .pb-step.passed{background:#1c2129;color:#58a6ff;border-color:#58a6ff}
+  .pb-step.active{background:#58a6ff;color:#0d1117;border-color:#58a6ff}
+  .pb-step.active.touch{background:var(--amber);border-color:var(--amber)}
+  .pb-step.active.confirmed{background:var(--green);border-color:var(--green)}
+  .pb-arrow{color:var(--dim);font-size:12px}
+  .pb-meta .kv span:last-child{font-size:11px;font-weight:500;text-align:right;max-width:62%}
+  .pb-trade{text-align:center;margin:10px 0}
+  .pb-rules{display:flex;gap:12px;margin-top:6px}
+  .pb-col{flex:1}
+  .pb-col h4{font-size:10px;text-transform:uppercase;margin-bottom:4px}
+  .pb-do{color:var(--green);font-size:11px;padding:2px 0}
+  .pb-dont{color:var(--red);font-size:11px;padding:2px 0}
+  .dash-toolbar,.sent-toolbar{display:flex;align-items:center;gap:12px;padding:12px 16px;flex-wrap:wrap}
+  .dash-status,.sent-status{font-size:13px;color:var(--dim)}
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px 12px}
+  .dash-grid .panel{min-height:80px}
+  .dash-grid .wide{grid-column:1/-1}
+  .verdict-box{font-size:13px;line-height:1.6;white-space:pre-wrap}
+  .sent-live{margin:0 12px 12px}
+  .sent-log{max-height:300px;overflow-y:auto;font-family:monospace;font-size:12px;line-height:1.7}
+  .sent-log div{padding:2px 0;border-bottom:1px solid #1c2129}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--dim);
+           border-top-color:#58a6ff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ SFD Chart Terminal</h1>
+  <select id="assetSel"></select>
+  <select id="intSel"></select>
+  <select id="rangeSel"></select>
+  <select id="srcSel"><option value="index" selected>Index</option><option value="futures">Futures (24h)</option></select>
+  <span class="badge blue" id="sessionBadge">…</span>
+  <span class="badge" id="calBadge">…</span>
+  <span class="badge" id="regimeBadge">…</span>
+  <div style="flex:1"></div>
+  <button onclick="loadAll()">⟳ Refresh</button>
+</header>
+
+<div class="tabbar">
+  <div class="tab-btn active" onclick="switchTab('chart')">📊 Chart</div>
+  <div class="tab-btn" onclick="switchTab('dashboard')">🖥️ Dashboard</div>
+  <div class="tab-btn" onclick="switchTab('sentinel')">👁️ Sentinel</div>
+</div>
+
+<div id="error"></div>
+<div id="basisBar" class="basis-bar"></div>
+
+<!-- ═══════════ TAB 1: CHART ═══════════ -->
+<div id="tab-chart" class="tab-content active">
+  <div class="grid top">
+    <div class="panel">
+      <h3>Price vs Gamma Walls <span class="prov">GexBot-style · thickness ∝ gamma</span></h3>
+      <div id="chartWrap">
+        <div id="legend"></div>
+        <div id="cxBadge" class="cx-badge" style="display:none"></div>
+        <div id="wallModeBadge" class="cx-badge" style="display:none;top:38px"></div>
+        <div id="tooltip"></div>
+        <div id="chart" style="height:100%"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>GEX Profile (90d OI) <span class="prov">CBOE-DELAYED</span></h3>
+      <div class="gex-tools">
+        <span class="gex-hint" id="gexHint">scroll = zoom · drag = pan</span>
+        <button id="gexPin" onclick="toggleGexPin()">📌 pin</button>
+        <button onclick="resetGexZoom()">⟲ reset</button>
+      </div>
+      <div id="gexWrap"><canvas id="gexHist"></canvas></div>
+    </div>
+  </div>
+  <div class="grid mid">
+    <div class="panel">
+      <h3>🌋 Volatility Surface — Strike × DTE × IV</h3>
+      <div class="surf-tools">
+        <button id="surf3d" class="primary" onclick="setSurfView('3d')">3D</button>
+        <button id="surf2d" onclick="setSurfView('2d')">2D</button>
+        <button onclick="setSurfCam('iso')">ISO</button>
+        <button onclick="setSurfCam('top')">TOP</button>
+        <button onclick="setSurfCam('side')">SIDE</button>
+        <button onclick="toggleSurfHelp()">? read</button>
+      </div>
+      <div id="surfHelp" class="surf-help" style="display:none">
+        <b>HOW TO READ THE SURFACE</b><br>
+        · X = strike · Y = days-to-expiry · Z/color = implied vol.<br>
+        · <b>Mountains</b> (high IV) = vol being BOUGHT → dealers fade → price tends to REJECT.<br>
+        · <b>Valleys</b> (low IV) = vol SOLD → little hedging resistance → price ACCELERATES through.<br>
+        · Amber line = ATM ridge (spot). Blue line = 0DTE front edge (the intraday F1 car).<br>
+        · Red ◆ = detected spikes (reject zones) · Green ● = pockets (acceleration zones).<br>
+        · TOP view = clean heatmap read · ISO = shape · 2D = flat map with exact strikes.
+      </div>
+      <div id="volSurface3d"></div>
+      <div id="surfNarrative" class="surf-narr"></div>
+    </div>
+    <div class="panel"><h3>📖 Playbook <span class="prov">OPERATOR'S MANUAL</span></h3><div id="playbook"></div></div>
+  </div>
+  <div class="grid three">
+    <div class="panel"><h3>Walls & Ticket <span class="prov">MATH</span></h3><div id="ticket"></div></div>
+    <div class="panel"><h3>Volatility Surface Summary <span class="prov">CBOE-DELAYED</span></h3><div id="surface"></div></div>
+    <div class="panel"><h3>Verdict Ledger <span class="prov">HASH-CHAINED</span></h3>
+      <div id="verdicts" style="max-height:280px;overflow:auto"></div></div>
+  </div>
+</div>
+
+<!-- ═══════════ TAB 2: DASHBOARD ═══════════ -->
+<div id="tab-dashboard" class="tab-content">
+  <div class="dash-toolbar">
+    <button id="runDashBtn" class="primary" onclick="runDashboard()">▶ Run Full Dashboard</button>
+    <span class="dash-status" id="dashStatus">Ready. Select an asset and hit Run.</span>
+  </div>
+  <div class="dash-grid">
+    <div class="panel"><h3>🗓️ Environment</h3><div id="d-env-body" class="dim">—</div></div>
+    <div class="panel"><h3>🧱 Structural Walls</h3><div id="d-walls-body" class="dim">—</div></div>
+    <div class="panel"><h3>📡 Tape Speed</h3><div id="d-tape-body" class="dim">—</div></div>
+    <div class="panel"><h3>🏎️ 0DTE Engine</h3><div id="d-0dte-body" class="dim">—</div></div>
+    <div class="panel"><h3>📊 Options Flow</h3><div id="d-flow-body" class="dim">—</div></div>
+    <div class="panel"><h3>🌋 Vol Surface</h3><div id="d-surface-body" class="dim">—</div></div>
+    <div class="panel wide"><h3>⚖️ Risk Manager Verdict</h3><div id="d-verdict-body" class="verdict-box dim">—</div></div>
+    <div class="panel wide"><h3>🎫 Execution Ticket</h3><div id="d-ticket-body" class="dim">—</div></div>
+  </div>
+</div>
+
+<!-- ═══════════ TAB 3: SENTINEL ═══════════ -->
+<div id="tab-sentinel" class="tab-content">
+  <div class="sent-toolbar">
+    <button id="sentinelStartBtn" class="primary" onclick="startSentinel()">▶ Start Sentinel</button>
+    <span class="badge blue" id="sentinelAsset">—</span>
+    <span class="badge dim" id="sentinelStateBadge">IDLE</span>
+    <span class="sent-status" id="sentinelStatus">Ready. Pick an asset and start watching.</span>
+  </div>
+  <div style="padding:0 16px">
+    <div class="sent-steps">
+      <span class="pb-step" id="ss-WATCHING">WATCHING</span><span class="pb-arrow">›</span>
+      <span class="pb-step" id="ss-ARMED">ARMED</span><span class="pb-arrow">›</span>
+      <span class="pb-step" id="ss-TOUCHED">TOUCHED</span><span class="pb-arrow">›</span>
+      <span class="pb-step" id="ss-CONFIRMED">CONFIRMED</span>
+    </div>
+  </div>
+  <div class="panel sent-live">
+    <div class="kv"><span>Spot</span><span id="sentSpot">—</span></div>
+    <div class="kv"><span>Put Wall distance</span><span id="sentPutDist">—</span></div>
+    <div class="kv"><span>Call Wall distance</span><span id="sentCallDist">—</span></div>
+    <div class="kv"><span>Nearest wall</span><span id="sentNearest">—</span></div>
+  </div>
+  <div class="grid full">
+    <div class="panel"><h3>🎫 Latest Ticket</h3><div id="sentinelTicket" class="dim">No ticket yet.</div></div>
+    <div class="panel"><h3>📜 Event Log</h3><div id="sentinelLog" class="sent-log"></div></div>
+  </div>
+</div>
+
+<div class="foot">Read-only client · Python is the brain · wheel=zoom, drag=pan, hover=tooltip · auto-refresh 60s</div>
+
+<script>
+if(window.ChartZoom&&window.Chart){try{Chart.register(window.ChartZoom);}catch(e){}}
+let currentSymbol='SPX', chart=null, candleSeries=null, gexChart=null;
+let candleData=[], wallsData=null, surfaceData=null;
+let dashEventSource=null, sentinelSource=null;
+let currentInt='5m', currentRange='1mo', gexPinned=false, currentSource='index';
+let surfView='3d', surfVolCache=null, surfAnaCache=null;
+const $=id=>document.getElementById(id);
+const fmtN=n=>(+n).toLocaleString(undefined,{maximumFractionDigits:0});
+async function j(u){const r=await fetch(u);if(!r.ok)throw new Error(u+' -> HTTP '+r.status);
+  const t=await r.text();try{return JSON.parse(t)}catch(e){throw new Error(u+' -> not JSON')}}
+function showError(m){$('error').style.display='block';$('error').textContent='❌ '+m}
+function clearError(){$('error').style.display='none'}
+
+const ET_T=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+const ET_F=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+const D_F =new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'2-digit',day:'2-digit',year:'2-digit'});
+function fmtET(t){return ET_T.format(new Date(t*1000));}
+function fmtETfull(t){return ET_F.format(new Date(t*1000))+' ET';}
+function fmtDate(t){return D_F.format(new Date(t*1000));}
+
+/* ── selectors ── */
+const RANGES={
+  "1m":["1d","5d"],
+  "5m":["5d","1mo"],
+  "15m":["5d","1mo"],
+  "1h":["1mo","6mo","1y"],
+  "1d":["6mo","1y","2y"],
+};
+function rebuildRanges(){
+  const opts=RANGES[currentInt];
+  if(!opts.includes(currentRange)) currentRange=opts[opts.length-1];
+  $('rangeSel').innerHTML=opts.map(r=>`<option value="${r}">${r}</option>`).join('');
+  $('rangeSel').value=currentRange;
+}
+function buildSelectors(){
+  $('intSel').innerHTML=Object.keys(RANGES).map(k=>`<option value="${k}">${k}</option>`).join('');
+  $('intSel').value=currentInt;
+  rebuildRanges();
+  $('intSel').onchange=e=>{currentInt=e.target.value;rebuildRanges();loadAll();};
+  $('rangeSel').onchange=e=>{currentRange=e.target.value;loadAll();};
+  $('srcSel').onchange=()=>loadAll();
+}
+
+/* ── tabs ── */
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add('active');
+  $('tab-'+name).classList.add('active');
+  if(name==='chart'&&chart) chart.timeScale().fitContent();
+}
+
+/* ── assets (tolerant) ── */
+async function loadAssets(){
+  let list=[];
+  try{ list=await j('/api/assets'); }catch(e){ list=[]; }
+  const arr=Array.isArray(list)?list:Object.entries(list||{}).map(([k,v])=>({key:k,futures:(v&&v.futures)||k}));
+  if(!arr.length)arr.push({key:'SPX',futures:'ES'},{key:'NDX',futures:'NQ'});
+  $('assetSel').innerHTML=arr.map(a=>`<option value="${a.key}">${a.key} → ${a.futures||''}</option>`).join('');
+  if(!arr.find(a=>a.key===currentSymbol))currentSymbol=arr[0].key;
+  $('assetSel').value=currentSymbol;
+  $('assetSel').onchange=e=>{currentSymbol=e.target.value;loadAll()};
+}
+
+/* ══════════ CHART TAB ══════════ */
+async function loadAll(){
+  clearError();
+  const q=`symbol=${currentSymbol}`;
+  const R=await Promise.allSettled([
+    j('/api/environment'), j('/api/walls?'+q), j('/api/surface?'+q),
+    j(`/api/chart?${q}&interval=${currentInt}&period=${currentRange}&source=${$('srcSel').value}`),
+    j('/api/verdicts?'+q), j('/api/ticket?'+q), j('/api/playbook?'+q),
+    j('/api/vol_surface?'+q), j('/api/gex_signals?'+q)]);
+  const V=i=>R[i].status==='fulfilled'?R[i].value:null;
+  const env=V(0),walls=V(1),surface=V(2),candles=V(3),verdicts=V(4),
+        ticket=V(5),pb=V(6),volSurf=V(7),gexSig=V(8);
+  const failed=R.filter(r=>r.status==='rejected');
+  if(failed.length)showError(failed.length+' endpoint(s) failed: '+
+    failed.map(f=>(f.reason&&f.reason.message)||'?').join(' · '));
+  if(!walls){showError('Walls missing — check server.');return}
+  currentSource=$('srcSel').value;
+  candleData=candles||[]; wallsData=walls; surfaceData=surface;
+  if(env)renderHeader(env,walls);
+  renderGex(walls);
+  if(pb){renderPlaybook(pb);renderCx(pb);}
+  renderWallMode(walls);
+  renderChart(candleData,walls,surface,verdicts||[],ticket,currentSource);
+  renderTicket(walls,ticket);
+  if(gexSig)renderGexSignals(gexSig);
+  renderVolSurface3D(volSurf, surface);
+  if(surface)renderSurface(surface);
+  renderVerdicts(verdicts||[]);
+  loadBasis();
+}
+
+function renderHeader(env,walls){
+  const s=env.session;
+  $('sessionBadge').textContent=`${s.phase} ${s.local_time}`;
+  $('sessionBadge').className='badge '+(s.phase==='THETA_BURN'?'green':(s.phase==='CLOSED'?'red':'amber'));
+  const c=env.calendar;
+  $('calBadge').textContent=c.risk_level;
+  $('calBadge').className='badge '+(c.risk_level==='NORMAL'?'green':(c.risk_level==='BLACKOUT'?'red':'amber'));
+  if(walls&&walls.regime){
+    $('regimeBadge').textContent=`${walls.regime} γ`;
+    $('regimeBadge').className='badge '+(walls.regime==='POSITIVE'?'green':'red');
+  }
+}
+
+/* ── complexity badge (CX-1..4) ── */
+function renderCx(pb){
+  const el=$('cxBadge');if(!el)return;
+  const cx=pb&&pb.complexity;
+  if(!cx){el.style.display='none';return}
+  el.style.display='block';
+  el.className='cx-badge'+(cx.level>=3?' hot':'');
+  el.textContent='CX-'+cx.level+' · '+cx.label;
+  el.title=((cx.flags&&cx.flags.length)?cx.flags.join(', '):'clean surface')+' — '+cx.playbook;
+}
+
+/* ── wall-mode badge (RTH vs NQ-only) ── */
+function renderWallMode(walls){
+  const el=$('wallModeBadge');if(!el)return;
+  const wm=walls&&walls.wall_mode;
+  if(!wm){el.style.display='none';return}
+  el.style.display='block';
+  const rth=wm.active==='translated';
+  el.className='cx-badge'+(rth?' hot':'');
+  el.textContent=rth?'RTH → USE TRANSLATED (raw+basis)':'NQ-ONLY → USE RAW';
+  el.title=wm.note||'';
+}
+
+function renderPlaybook(pb){
+  const el=$('playbook');
+  if(!pb||pb.error){el.innerHTML='<span class="flat">no playbook data</span>';return}
+  const steps=['WATCHING','ARMED','TOUCHED','CONFIRMED'];
+  const idx=steps.indexOf(pb.loop_state);
+  const stepsHtml=steps.map((s,i)=>{
+    let cls='pb-step';
+    if(i===idx){cls+=' active';if(s==='TOUCHED')cls+=' touch';}
+    else if(i<idx)cls+=' passed';
+    return `<span class="${cls}">${s}</span>`;
+  }).join('<span class="pb-arrow">›</span>');
+  const tradeBadge=pb.tradeable?'<span class="badge green">TRADEABLE</span>':'<span class="badge red">NO TRADE</span>';
+  const doHtml=(pb.do||[]).map(d=>`<div class="pb-do">✓ ${d}</div>`).join('');
+  const dontHtml=(pb.dont||[]).map(d=>`<div class="pb-dont">✗ ${d}</div>`).join('');
+  const cx=pb.complexity;
+  el.innerHTML=`
+    <div class="pb-headline">${pb.headline||''}</div>
+    <div class="pb-steps">${stepsHtml}</div>
+    <div class="pb-meta">
+      <div class="kv"><span>Nearest wall</span><span>${pb.nearest_wall} · ${pb.distance_pct}% away</span></div>
+      <div class="kv"><span>Session</span><span>${pb.session_bias}</span></div>
+      <div class="kv"><span>Calendar</span><span>${pb.calendar_rule}</span></div>
+      <div class="kv"><span>Regime</span><span>${pb.regime_bias}</span></div>
+      <div class="kv"><span>0DTE</span><span>${pb.zero_dte.level} — ${pb.zero_dte.note}</span></div>
+      <div class="kv"><span>Complexity</span><span>${cx?('CX-'+cx.level+' · '+cx.label):'—'}</span></div>
+      <div class="kv"><span>CX flags</span><span style="font-size:11px">${cx&&cx.flags&&cx.flags.length?cx.flags.join(', '):'none — clean surface'}</span></div>
+    </div>
+    <div class="pb-trade">${tradeBadge}</div>
+    <div class="pb-rules">
+      <div class="pb-col"><h4 style="color:var(--green)">Do</h4>${doHtml}</div>
+      <div class="pb-col"><h4 style="color:var(--red)">Don't</h4>${dontHtml}</div>
+    </div>`;
+}
+
+function buildWallBars(walls,surface,shift=0){
+  const prof=walls.profile||{};
+  const entries=Object.entries(prof).map(([k,v])=>[parseFloat(k)+shift,v]);
+  const maxAbs=Math.max(1,...entries.map(e=>Math.abs(e[1])));
+  const bars=[];
+  entries.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  for(const [strike,gex] of entries.slice(0,12)){
+    const t=2+(Math.abs(gex)/maxAbs)*12;
+    bars.push({price:strike,thickness:t,label:null,
+      color:gex>=0?'rgba(38,166,154,0.30)':'rgba(239,83,80,0.30)'});
+  }
+  if(walls.put_wall) bars.push({price:walls.put_wall+shift,thickness:10,color:'rgba(239,83,80,0.60)',label:'PUT WALL '+fmtN(walls.put_wall+shift)});
+  if(walls.call_wall) bars.push({price:walls.call_wall+shift,thickness:10,color:'rgba(38,166,154,0.60)',label:'CALL WALL '+fmtN(walls.call_wall+shift)});
+  return bars;
+}
+function makeWallPrimitive(series,bars){
+  const prim={_bars:bars,_series:null,
+    attached(p){this._series=p.series},detached(){},updateAllViews(){},
+    paneViews(){return[this._view]}};
+  prim._view={zOrder:()=>'bottom',renderer:()=>({
+    draw:(target)=>{target.useMediaCoordinateSpace(({context,mediaSize})=>{
+      for(const b of prim._bars){
+        if(!prim._series)continue;
+        const y=prim._series.priceToCoordinate(b.price);
+        if(y===null||y===undefined)continue;
+        context.fillStyle=b.color;
+        context.fillRect(0,y-b.thickness/2,mediaSize.width,b.thickness);
+        if(b.label){context.fillStyle='rgba(255,255,255,0.92)';
+          context.font='bold 10px -apple-system,monospace';
+          context.fillText(b.label,8,y-b.thickness/2-3);}
+      }})}})};
+  return prim;
+}
+
+function renderChart(candles,walls,surface,verdicts,ticket,source='index'){
+  if(chart){chart.remove();chart=null}
+  const el=$('chart');
+  const intraday=currentInt!=='1d';
+  chart=LightweightCharts.createChart(el,{
+    layout:{background:{color:'#0d1117'},textColor:'#c9d1d9'},
+    grid:{vertLines:{color:'#161b22'},horzLines:{color:'#161b22'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal,
+      vertLine:{labelBackgroundColor:'#30363d'},horzLine:{labelBackgroundColor:'#30363d'}},
+    localization:{timeFormatter:(t)=>intraday?fmtETfull(t):fmtDate(t)},
+    timeScale:{timeVisible:intraday,secondsVisible:false,borderColor:'#30363d',
+      tickMarkFormatter:(t)=>intraday?fmtET(t):fmtDate(t)},
+    rightPriceScale:{borderColor:'#30363d'},
+    handleScroll:true,handleScale:true,
+    width:el.clientWidth,height:el.clientHeight,autoSize:true});
+  candleSeries=chart.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',
+    wickUpColor:'#26a69a',wickDownColor:'#ef5350',borderVisible:false});
+  if(candles.length)candleSeries.setData(candles);
+
+  // ── walls: source- and session-aware; futures lines ALWAYS visible (ref when off) ──
+  const wm=walls.wall_mode||{active:'translated'};
+  const rth=wm.active==='translated';
+  const basis=walls.basis||0;
+  const pfw=walls.put_wall_fut!=null?walls.put_wall_fut:(walls.put_wall!=null?walls.put_wall+basis:null);
+  const cfw=walls.call_wall_fut!=null?walls.call_wall_fut:(walls.call_wall!=null?walls.call_wall+basis:null);
+  candleSeries.attachPrimitive(makeWallPrimitive(candleSeries,buildWallBars(walls,surface,(source==='futures'&&rth)?basis:0)));
+  const line=(p,c,st,title,w=1)=>{if(p)candleSeries.createPriceLine({price:p,color:c,lineWidth:w,lineStyle:st,axisLabelVisible:true,title})};
+
+  line(walls.put_wall_0dte,'#ef5350',2,'0DTE PUT',2);
+  line(walls.call_wall_0dte,'#26a69a',2,'0DTE CALL',2);
+  if(ticket&&ticket.entry){
+    line(ticket.entry,'#58a6ff',0,'ENTRY');line(ticket.stop,'#f85149',3,'STOP');
+    line(ticket.target_1,'#3fb950',3,'T1');line(ticket.target_2,'#3fb950',3,'T2');}
+
+  const marks=(verdicts||[]).filter(v=>v.entry&&v.direction&&v.direction!=='FLAT'&&candles.length)
+    .map(v=>({time:snap(v.ts),position:v.direction==='LONG'?'belowBar':'aboveBar',
+      color:v.direction==='LONG'?'#26a69a':'#ef5350',
+      shape:v.direction==='LONG'?'arrowUp':'arrowDown',text:v.decision}))
+    .sort((a,b)=>a.time-b.time);
+  if(marks.length)candleSeries.setMarkers(marks);
+  if(candles.length)chart.timeScale().fitContent();
+  try{chart.timeScale().subscribeVisibleLogicalRangeChange(()=>syncGex());}catch(e){}
+  try{chart.priceScale('right').subscribeVisibleLogicalRangeChange(()=>syncGex());}catch(e){}
+  if(gexPinned)syncGex();
+  const tip=$('tooltip'),legend=$('legend');
+  chart.subscribeCrosshairMove(param=>{
+    if(!param.time||!param.seriesData||!param.seriesData.has(candleSeries)){tip.style.display='none';updateLegend(null);return}
+    const d=param.seriesData.get(candleSeries);
+    updateLegend(d);
+    const near=nearestWall(d.close||d.value);
+    tip.style.display='block';
+    tip.innerHTML=`<b>${currentSymbol}</b> ${currentInt} · ${currentRange}<br>
+      <span style="color:var(--dim)">${intraday?fmtETfull(param.time):fmtDate(param.time)}</span><br>
+      O ${d.open?.toFixed(2)} H ${d.high?.toFixed(2)} L ${d.low?.toFixed(2)} C ${d.close?.toFixed(2)}<br>
+      <span style="color:var(--dim)">Put wall: ${near.put?fmtN(near.put):'—'} (${near.putD!=null?near.putD.toFixed(2)+'%':''})</span><br>
+      <span style="color:var(--dim)">Call wall: ${near.call?fmtN(near.call):'—'} (${near.callD!=null?near.callD.toFixed(2)+'%':''})</span>`;
+    const x=Math.min(param.point.x+14,el.clientWidth-190),y=Math.max(param.point.y-20,8);
+    tip.style.left=x+'px';tip.style.top=y+'px';
+  });
+  function updateLegend(d){
+    const last=d||candles[candles.length-1];
+    if(!last){legend.innerHTML='';return}
+    const chg=last.open?((last.close-last.open)/last.open*100):0;
+    const near=nearestWall(last.close);
+    legend.innerHTML=`<b>${currentSymbol}</b> ${currentInt} · ${currentRange} C ${last.close?.toFixed(2)}
+      <span class="${chg>=0?'pos':'neg'}">${chg>=0?'▲':'▼'}${Math.abs(chg).toFixed(2)}%</span><br>
+      <span class="neg">P ${near.put?fmtN(near.put):'—'}</span> ·
+      <span class="pos">C ${near.call?fmtN(near.call):'—'}</span> · <span style="color:var(--dim)">🕐 ET</span>`;
+  }
+  updateLegend(null);
+}
+function nearestWall(px){
+  const wm=wallsData&&wallsData.wall_mode||{active:'translated'};
+  const rth=wm.active==='translated';
+  const put=(currentSource==='futures'&&rth)?(wallsData?.put_wall_fut??wallsData?.put_wall):wallsData?.put_wall;
+  const call=(currentSource==='futures'&&rth)?(wallsData?.call_wall_fut??wallsData?.call_wall):wallsData?.call_wall;
+  const o={put:put,call:call,putD:null,callD:null};
+  if(px&&o.put)o.putD=(px-o.put)/px*100;
+  if(px&&o.call)o.callD=(o.call-px)/px*100;
+  return o;
+}
+function snap(ts){let b=candleData[0]?candleData[0].time:0,bd=1e18;
+  for(const c of candleData){const d=Math.abs(c.time-ts);if(d<bd){bd=d;b=c.time}}return b}
+
+/* ── GEX profile ── */
+function visiblePriceRange(){
+  if(!chart||!candleSeries)return null;
+  const el=$('chart');
+  try{
+    const top=candleSeries.coordinateToPrice(0);
+    const bot=candleSeries.coordinateToPrice(el.clientHeight);
+    if(top==null||bot==null)return null;
+    return {min:Math.min(top,bot),max:Math.max(top,bot)};
+  }catch(e){return null}
+}
+function syncGex(){
+  if(!gexPinned||!gexChart)return;
+  const vr=visiblePriceRange();
+  if(!vr)return;
+  gexChart.options.scales.y.min=vr.min;
+  gexChart.options.scales.y.max=vr.max;
+  gexChart.update('none');
+}
+function toggleGexPin(){
+  gexPinned=!gexPinned;
+  const b=$('gexPin');
+  b.textContent=gexPinned?'📌 pinned':'📌 pin';
+  b.className=gexPinned?'primary':'';
+  $('gexHint').textContent=gexPinned?'locked to chart — zoom/pan the chart':'scroll = zoom · drag = pan';
+  if(wallsData)renderGex(wallsData);
+  if(gexPinned)syncGex();
+}
+function renderGex(walls){
+  const prof=walls.profile||{},spot=walls.spot;
+  let e=Object.entries(prof).map(([k,v])=>[parseFloat(k),v])
+    .filter(([k])=>Math.abs(k-spot)/spot<=0.05).sort((a,b)=>b[0]-a[0]);
+  const ctx=$('gexHist');if(gexChart)gexChart.destroy();
+  if(!e.length){ctx.parentElement.innerHTML='<span class="flat">no GEX data near spot</span>';return}
+  const colors=e.map(([k,v])=>v>=0?'rgba(38,166,154,.75)':'rgba(239,83,80,.75)');
+  if(gexPinned){
+    const vr=visiblePriceRange();
+    gexChart=new Chart(ctx,{type:'bar',
+      data:{datasets:[{data:e.map(([k,v])=>({x:v,y:k})),
+        backgroundColor:colors,barThickness:3,borderWidth:0}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{display:false},
+          zoom:{pan:{enabled:false},zoom:{wheel:{enabled:false},pinch:{enabled:false}}},
+          tooltip:{callbacks:{title:it=>'Strike '+fmtN(it[0].parsed.y),
+            label:it=>'GEX '+(+it[0].parsed.x).toExponential(2)}}},
+        scales:{x:{ticks:{color:'#8b949e',font:{size:10}},grid:{color:'#161b22'}},
+                y:{type:'linear',
+                   min:vr?vr.min:undefined,max:vr?vr.max:undefined,
+                   ticks:{color:'#c9d1d9',font:{size:11},callback:v=>fmtN(v)},
+                   grid:{display:false}}}}});
+  }else{
+    gexChart=new Chart(ctx,{type:'bar',
+      data:{labels:e.map(x=>fmtN(x[0])),
+        datasets:[{data:e.map(x=>x[1]),
+          backgroundColor:colors,
+          borderWidth:0,barPercentage:0.9,categoryPercentage:0.9}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{title:it=>'Strike '+it[0].label,
+            label:it=>'GEX '+(+it.raw).toExponential(2)}},
+          zoom:{pan:{enabled:true,mode:'y'},
+                zoom:{wheel:{enabled:true,speed:0.1},pinch:{enabled:true},mode:'y'}}},
+        scales:{x:{ticks:{color:'#8b949e',font:{size:10}},grid:{color:'#161b22'}},
+                y:{ticks:{color:'#c9d1d9',autoSkip:true,maxTicksLimit:45,font:{size:11}},grid:{display:false}}}}});
+  }
+}
+function resetGexZoom(){if(gexChart&&!gexPinned)gexChart.resetZoom();}
+
+/* ── Vol surface ── */
+function nearestIdx(arr,v){if(v==null||!arr||!arr.length)return -1;let b=0,bd=Infinity;
+  for(let i=0;i<arr.length;i++){const d=Math.abs(arr[i]-v);if(d<bd){bd=d;b=i;}}return b;}
+function setSurfView(v){surfView=v;
+  $('surf3d').className=v==='3d'?'primary':'';
+  $('surf2d').className=v==='2d'?'primary':'';
+  renderVolSurface3D(surfVolCache,surfAnaCache);}
+function setSurfCam(c){const eyes={iso:{x:1.6,y:-1.6,z:1.0},top:{x:0.001,y:0.001,z:2.4},side:{x:0.001,y:-2.4,z:0.15}};
+  try{Plotly.relayout('volSurface3d',{'scene.camera.eye':eyes[c]});}catch(e){}}
+function toggleSurfHelp(){const h=$('surfHelp');h.style.display=h.style.display==='none'?'block':'none';}
+function renderVolSurface3D(volSurf,surface){
+  surfVolCache=volSurf;surfAnaCache=surface;
+  const el=$('volSurface3d');
+  if(!volSurf||!volSurf.iv_grid||!volSurf.iv_grid.length){el.innerHTML='<span class="flat">no vol surface data</span>';$('surfNarrative').textContent='';return}
+  const traces=[];
+  const hov='Strike %{x} · %{y} DTE · IV %{z:.2f}%<extra></extra>';
+  if(surfView==='3d'){
+    traces.push({type:'surface',x:volSurf.strikes,y:volSurf.dtes,z:volSurf.iv_grid,
+      colorscale:'Viridis',hovertemplate:hov,
+      colorbar:{title:'IV',titlefont:{color:'#8b949e'},tickfont:{color:'#8b949e'}}});
+    const si=nearestIdx(volSurf.strikes,volSurf.spot);
+    if(si>=0)traces.push({type:'scatter3d',mode:'lines',name:'ATM ridge',hoverinfo:'skip',
+      x:volSurf.dtes.map(()=>volSurf.strikes[si]),y:volSurf.dtes,
+      z:volSurf.iv_grid.map(r=>r[si]),line:{color:'#e3b341',width:4}});
+    traces.push({type:'scatter3d',mode:'lines',name:'0DTE edge',hoverinfo:'skip',
+      x:volSurf.strikes,y:volSurf.strikes.map(()=>volSurf.dtes[0]),
+      z:volSurf.iv_grid[0],line:{color:'#58a6ff',width:3}});
+    if(surface){
+      const add=(list,color,sym,tag)=>(list||[]).slice(0,3).forEach(p=>{
+        const k=nearestIdx(volSurf.strikes,p.strike);if(k<0)return;
+        let bi=0,bv=-1;volSurf.iv_grid.forEach((r,i)=>{const v=r[k];if(v!=null&&v>bv){bv=v;bi=i;}});
+        traces.push({type:'scatter3d',mode:'markers',name:tag,
+          x:[p.strike],y:[volSurf.dtes[bi]],z:[bv],
+          marker:{size:5,color:color,symbol:sym},
+          hovertemplate:tag+' '+fmtN(p.strike)+'<extra></extra>'});
+      });
+      add(surface.spikes,'#ef5350','diamond','▲ SPIKE (reject)');
+      add(surface.pockets,'#26a69a','circle','▼ POCKET (accel)');
+    }
+  }else{
+    traces.push({type:'heatmap',x:volSurf.strikes,y:volSurf.dtes,z:volSurf.iv_grid,
+      colorscale:'Viridis',hovertemplate:hov,
+      colorbar:{title:'IV',titlefont:{color:'#8b949e'},tickfont:{color:'#8b949e'}}});
+    traces.push({type:'scatter',mode:'lines',hoverinfo:'skip',name:'spot',
+      x:[volSurf.spot,volSurf.spot],y:[volSurf.dtes[0],volSurf.dtes[volSurf.dtes.length-1]],
+      line:{color:'#e3b341',width:2,dash:'dot'}});
+    if(surface){
+      if((surface.spikes||[]).length)traces.push({type:'scatter',mode:'markers',name:'▲ spike',
+        x:surface.spikes.slice(0,3).map(p=>p.strike),y:surface.spikes.slice(0,3).map(()=>volSurf.dtes[0]),
+        marker:{size:9,color:'#ef5350',symbol:'diamond'},hovertemplate:'▲ %{x}<extra></extra>'});
+      if((surface.pockets||[]).length)traces.push({type:'scatter',mode:'markers',name:'▼ pocket',
+        x:surface.pockets.slice(0,3).map(p=>p.strike),y:surface.pockets.slice(0,3).map(()=>volSurf.dtes[0]),
+        marker:{size:9,color:'#26a69a',symbol:'circle'},hovertemplate:'▼ %{x}<extra></extra>'});
+    }
+  }
+  const layout = surfView==='3d' ?
+    {paper_bgcolor:'#0d1117',font:{color:'#8b949e'},showlegend:false,
+     scene:{xaxis:{title:'Strike',color:'#8b949e',gridcolor:'#161b22'},
+            yaxis:{title:'DTE',color:'#8b949e',gridcolor:'#161b22'},
+            zaxis:{title:'IV',color:'#8b949e',gridcolor:'#161b22'},
+            camera:{eye:{x:1.6,y:-1.6,z:1.0}},bgcolor:'#0d1117'},
+     margin:{l:0,r:0,t:10,b:0},height:400} :
+    {paper_bgcolor:'#0d1117',plot_bgcolor:'#0d1117',font:{color:'#8b949e'},showlegend:false,
+     xaxis:{title:'Strike',color:'#8b949e',gridcolor:'#161b22'},
+     yaxis:{title:'DTE',color:'#8b949e',gridcolor:'#161b22',autorange:'reversed'},
+     margin:{l:50,r:10,t:10,b:40},height:400};
+  Plotly.react(el,traces,layout,{responsive:true,displayModeBar:false});
+  surfNarrative(surface);
+}
+function surfNarrative(surface){
+  const el=$('surfNarrative');if(!el)return;
+  if(!surface){el.textContent='';return}
+  const parts=[];
+  const sk=surface.skew||{},tm=surface.term_structure||{};
+  if(sk.valid)parts.push('Skew: '+sk.interpretation);
+  if(tm.valid)parts.push('Term: '+tm.note);
+  if((surface.spikes||[]).length)parts.push('▲ reject mountains at '+(surface.spikes.slice(0,2).map(s=>fmtN(s.strike)).join(', ')));
+  if((surface.pockets||[]).length)parts.push('▼ accel valleys at '+(surface.pockets.slice(0,2).map(p=>fmtN(p.strike)).join(', ')));
+  el.innerHTML='<b style="color:var(--amber)">Reading:</b> '+parts.join(' · ');
+}
+
+/* ── Basis monitor ── */
+async function loadBasis(){
+  try{renderBasis(await j('/api/basis'));}
+  catch(e){renderBasis(null);}
+}
+function renderBasis(b){
+  const el=$('basisBar');if(!el)return;
+  if(!b||!b.pairs||(!b.pairs.NDX&&!b.pairs.SPX)){
+    el.innerHTML='<div class="basis-card"><span class="dim">⚠️ basis feed offline — check /api/basis (restart server?)</span></div>';
+    return;
+  }
+  const f2=n=>n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const card=(title,d)=>{
+    if(!d)return '';
+    const dc=d.day_change==null?'<span class="dim">Δd —</span>':
+      (d.day_change>=0?`<span class="pos">Δd +${d.day_change.toFixed(1)}</span>`
+                      :`<span class="neg">Δd ${d.day_change.toFixed(1)}</span>`);
+    const tag=Math.abs(d.vs_fair)<=10?'<span class="dim">≈ fair</span>':
+      (d.vs_fair>0?'<span class="flat">RICH vs fair</span>':'<span class="flat">CHEAP vs fair</span>');
+    return `<div class="basis-card"><b>${title}</b>
+      <span class="dim">Fut ${f2(d.fut)} · Idx ${f2(d.index)}</span>
+      <span class="${d.basis>=0?'pos':'neg'}">Basis ${d.basis>=0?'+':''}${f2(d.basis)} (${d.basis_pct.toFixed(2)}%)</span>
+      <span>${dc} · fair ${d.fair>=0?'+':''}${d.fair.toFixed(0)} · ${tag}</span></div>`;
+  };
+  el.innerHTML=card('NQ − NDX',b.pairs.NDX)+card('ES − SPX',b.pairs.SPX)+
+    `<div class="basis-card"><span class="dim">🕐 ${new Date(b.ts*1000).toLocaleTimeString()} · ${b.provenance}</span>
+     <span class="dim">basis = future − index · Δd = change vs prior-day basis</span></div>`;
+}
+
+function renderTicket(walls,t){
+  const el=$('ticket');
+  const basis=walls.basis||0;
+  const pfw=walls.put_wall_fut!=null?walls.put_wall_fut:(walls.put_wall!=null?walls.put_wall+basis:null);
+  const cfw=walls.call_wall_fut!=null?walls.call_wall_fut:(walls.call_wall!=null?walls.call_wall+basis:null);
+  let html=`<div class="kv"><span>Spot</span><span>$${(+walls.spot).toLocaleString()}</span></div>
+    <div class="kv"><span>Put Wall</span><span class="neg">$${fmtN(walls.put_wall)}</span></div>
+    <div class="kv"><span>Call Wall</span><span class="pos">$${fmtN(walls.call_wall)}</span></div>
+    <div class="kv"><span>Flip (zero-γ)</span><span class="flat">$${fmtN(walls.flip_point||0)}</span></div>`;
+  html+=`<div class="kv"><span>0DTE Put / Call</span><span><span class="neg">$${walls.put_wall_0dte?fmtN(walls.put_wall_0dte):'—'}</span> / <span class="pos">$${walls.call_wall_0dte?fmtN(walls.call_wall_0dte):'—'}</span></span></div>`;
+  if(walls.instrument){
+    html+=`<div class="kv"><span>Suggested instrument</span><span class="flat">${walls.instrument.instrument}</span></div>
+    <div class="kv"><span>Instrument note</span><span style="font-size:11px">${walls.instrument.note}</span></div>`;
+  }
+  if(walls.basis!=null){
+    html+=`<div class="kv"><span>Basis (fut−idx)</span><span>${(+walls.basis).toFixed(2)}</span></div>`;
+  }
+  if(pfw||cfw){
+    html+=`<div class="kv"><span>Translated Put/Call</span><span><span class="neg">$${pfw?fmtN(pfw):'—'}</span> / <span class="pos">$${cfw?fmtN(cfw):'—'}</span></span></div>`;
+  }
+  if(walls.wall_mode){
+    html+=`<div class="kv"><span>Active level now</span><span class="flat">${walls.wall_mode.active==='translated'?'TRANSLATED (RTH)':'RAW (NQ-only)'}</span></div>`;
+  }
+  if(t&&t.entry){
+    const dc=t.direction==='LONG'?'pos':(t.direction==='SHORT'?'neg':'flat');
+    html+=`<div class="kv"><span>Signal</span><span class="${dc}">${t.decision} ${t.wall||''} · ${t.direction}</span></div>
+    <div class="kv"><span>Entry / Stop</span><span>$${(+t.entry).toLocaleString()} / $${(+t.stop).toLocaleString()}</span></div>
+    <div class="kv"><span>T1 / T2</span><span>$${(+t.target_1).toLocaleString()} / $${(+t.target_2).toLocaleString()}</span></div>`;
+  } else html+=`<div class="kv"><span>Signal</span><span class="flat">none logged</span></div>`;
+  el.innerHTML=html;
+}
+
+/* ── GEX signals readout ── */
+function renderGexSignals(s){
+  const el=$('ticket');if(!el||!s)return;
+  const m=s.composite_momentum||0;
+  const mc=m>25?'pos':(m<-25?'neg':'flat');
+  el.innerHTML+=`
+    <div class="kv"><span>Composite momentum</span><span class="${mc}">${m>0?'+':''}${m.toFixed(0)}</span></div>
+    <div class="kv"><span>Δ-weighted flow</span><span>${(s.delta_weighted_flow||0).toFixed(2)}</span></div>
+    <div class="kv"><span>Gamma squeeze</span><span>${(s.gamma_squeeze||0).toFixed(2)}</span></div>
+    <div class="kv"><span>Zero-gamma level</span><span class="flat">$${s.zero_gamma_level?fmtN(s.zero_gamma_level):'—'}</span></div>
+    <div class="kv"><span>X-check walls (net-GEX)</span><span><span class="neg">$${s.xcheck_put_wall?fmtN(s.xcheck_put_wall):'—'}</span> / <span class="pos">$${s.xcheck_call_wall?fmtN(s.xcheck_call_wall):'—'}</span></span></div>`;
+}
+
+function renderSurface(s){
+  const el=$('surface');if(!s){el.innerHTML='';return}
+  const sk=s.skew||{},tm=s.term_structure||{};
+  const rows=(s.spikes||[]).slice(0,4).map(x=>`<span class="badge red" style="margin:2px">▲ ${fmtN(x.strike)}</span>`).join('')+
+    (s.pockets||[]).slice(0,4).map(x=>`<span class="badge blue" style="margin:2px">▼ ${fmtN(x.strike)}</span>`).join('');
+  el.innerHTML=`<div class="kv"><span>Two Lines</span><span>${(s.top_convexity_levels||[]).map(fmtN).join(' · ')||'—'}</span></div>
+    <div class="kv"><span>Skew</span><span>${sk.valid?sk.skew+' — '+sk.interpretation:'—'}</span></div>
+    <div class="kv"><span>Term</span><span>${tm.valid?tm.note:'—'}</span></div>
+    <div style="margin-top:8px">${rows||'<span class="flat">no levels</span>'}</div>`;
+}
+
+function renderVerdicts(vs){
+  const el=$('verdicts');
+  if(!vs.length){el.innerHTML='<span class="flat">No verdicts for '+currentSymbol+' yet.</span>';return}
+  el.innerHTML='<table><tr><th>Time</th><th>Ctx</th><th>Wall</th><th>Dec</th><th>Dir</th><th>Entry</th><th>Conf</th></tr>'+
+    vs.slice(0,20).map(v=>{
+      const d=new Date(v.ts*1000).toLocaleTimeString();
+      const dc=v.direction==='LONG'?'pos':(v.direction==='SHORT'?'neg':'flat');
+      return `<tr><td>${d}</td><td>${(v.context||'').replace('sentinel_','')}</td>
+        <td>${v.wall||''}</td><td>${v.decision}</td><td class="${dc}">${v.direction||'FLAT'}</td>
+        <td>${v.entry?'$'+(+v.entry).toLocaleString():''}</td><td>${v.confidence}</td></tr>`;
+    }).join('')+'</table>';
+}
+
+/* ══════════ DASHBOARD TAB (SSE) ══════════ */
+function runDashboard(){
+  ['env','walls','tape','0dte','flow','surface','verdict','ticket'].forEach(k=>{
+    $('d-'+k+'-body').innerHTML='<span class="dim"><span class="spinner"></span>Waiting...</span>';
+  });
+  $('dashStatus').innerHTML='<span class="spinner"></span>Running pipeline...';
+  $('runDashBtn').disabled=true;
+  if(dashEventSource)dashEventSource.close();
+  dashEventSource=new EventSource(`/api/run_dashboard_stream?symbol=${currentSymbol}`);
+  dashEventSource.onmessage=(event)=>{
+    const msg=JSON.parse(event.data);
+    handleDashStage(msg.stage,msg.data);
+    if(msg.stage==='done'||msg.stage==='error'){
+      dashEventSource.close();
+      $('runDashBtn').disabled=false;
+      if(msg.stage==='done')$('dashStatus').textContent='✅ Complete. Verdict logged.';
+      else{$('dashStatus').textContent='❌ Error: '+msg.data.message;showError(msg.data.message);}
+    }
+  };
+  dashEventSource.onerror=()=>{dashEventSource.close();$('runDashBtn').disabled=false;
+    $('dashStatus').textContent='❌ Connection lost.';};
+}
+function handleDashStage(stage,data){
+  switch(stage){
+    case 'status': $('dashStatus').innerHTML='<span class="spinner"></span>'+data.message; break;
+    case 'environment':
+      $('d-env-body').innerHTML=`
+        <div class="kv"><span>Session</span><span>${data.session.phase} @ ${data.session.local_time}</span></div>
+        <div class="kv"><span>Calendar</span><span>${data.calendar.risk_level}</span></div>
+        <div class="kv"><span>Asset</span><span>${data.asset_key} → ${data.futures}</span></div>
+        <div class="kv"><span>Note</span><span style="font-size:11px">${data.session.note}</span></div>`;
+      break;
+    case 'walls':
+      $('d-walls-body').innerHTML=`
+        <div class="kv"><span>Spot</span><span>$${(+data.spot).toLocaleString()}</span></div>
+        <div class="kv"><span>Put Wall</span><span class="neg">$${fmtN(data.put_wall)}</span></div>
+        <div class="kv"><span>Call Wall</span><span class="pos">$${fmtN(data.call_wall)}</span></div>
+        <div class="kv"><span>Flip</span><span class="flat">$${fmtN(data.flip_point||0)}</span></div>
+        <div class="kv"><span>Regime</span><span>${data.regime} (${(+data.net_gex).toExponential(2)})</span></div>`;
+      break;
+    case 'tape':{
+      const tc=data.speed==='VIOLENT'?'neg':(data.speed==='GENTLE'?'pos':'flat');
+      $('d-tape-body').innerHTML=`
+        <div class="kv"><span>Speed</span><span class="${tc}">${data.speed}</span></div>
+        <div class="kv"><span>Slope</span><span>${(+data.slope_pct).toFixed(3)}%/bar</span></div>
+        <div class="kv"><span>Vol Ratio</span><span>${(+data.vol_ratio).toFixed(2)}x</span></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">${data.summary||''}</div>`;}
+      break;
+    case 'pipeline':{
+      const zd=data.flow?.zero_dte||{};
+      if(zd.valid){
+        const zc=zd.intensity>0.3?'neg':(zd.intensity>0.15?'flat':'pos');
+        $('d-0dte-body').innerHTML=`
+          <div class="kv"><span>Intensity</span><span class="${zc}">${(zd.intensity*100).toFixed(0)}%</span></div>
+          <div class="kv"><span>0DTE Vol</span><span>${(+zd.call_volume).toLocaleString()}C / ${(+zd.put_volume).toLocaleString()}P</span></div>
+          <div class="kv"><span>PCR</span><span>${zd.pcr}</span></div>
+          ${zd.sweep_count?`<div class="kv"><span>⚡ Sweep</span><span class="neg">${zd.sweep_side}</span></div>`:''}
+          <div style="font-size:11px;color:var(--dim);margin-top:4px">${zd.interpretation||''}</div>`;
+      }
+      const fl=data.flow||{};
+      const fc=(+fl.conviction)>0.3?'pos':((+fl.conviction)<-0.3?'neg':'flat');
+      $('d-flow-body').innerHTML=`
+        <div class="kv"><span>Conviction</span><span class="${fc}">${(+fl.conviction).toFixed(2)}</span></div>
+        <div class="kv"><span>PCR</span><span>${fl.pcr||'—'}</span></div>
+        <div class="kv"><span>Wall Load</span><span>${(+fl.call_wall_volume).toLocaleString()}C / ${(+fl.put_wall_volume).toLocaleString()}P</span></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">${fl.summary||''}</div>`;
+      const sv=data.surface||{};
+      $('d-surface-body').innerHTML=`
+        <div class="kv"><span>Two Lines</span><span>${(sv.top_convexity_levels||[]).map(fmtN).join(' · ')||'—'}</span></div>
+        <div class="kv"><span>Skew</span><span>${sv.skew?.valid?sv.skew.interpretation:'—'}</span></div>
+        <div class="kv"><span>Term</span><span>${sv.term?.valid?sv.term.note:'—'}</span></div>`;
+      const judge=data.judge||{};
+      const vc=judge.decision==='FADE'?'pos':(judge.decision==='BREAK'?'neg':'flat');
+      $('d-verdict-body').innerHTML=`
+        <div style="margin-bottom:8px"><span class="badge ${vc==='pos'?'green':(vc==='neg'?'red':'amber')}">${judge.decision}</span>
+        <span style="margin-left:8px;font-size:12px;color:var(--dim)">confidence: ${judge.confidence}</span></div>
+        <div style="font-size:12px;line-height:1.6">${judge.rationale||''}</div>`;
+      const tk=data.execution||{};
+      if(tk.direction&&tk.direction!=='FLAT'){
+        const dc=tk.direction==='LONG'?'pos':'neg';
+        $('d-ticket-body').innerHTML=`
+          <div class="kv"><span>Direction</span><span class="${dc}">${tk.direction}</span></div>
+          <div class="kv"><span>Entry</span><span>$${(+tk.entry).toLocaleString()}</span></div>
+          <div class="kv"><span>Stop</span><span class="neg">$${(+tk.stop_loss).toLocaleString()} (${tk.stop_ticks}t)</span></div>
+          <div class="kv"><span>T1</span><span class="pos">$${(+tk.target_1).toLocaleString()} (${tk.rr_target_1}R)</span></div>
+          <div class="kv"><span>T2</span><span class="pos">$${(+tk.target_2).toLocaleString()} (${tk.rr_target_2}R, ${tk.t2_source})</span></div>
+          <div class="kv"><span>Risk/contract</span><span>$${(+tk.risk_usd).toLocaleString()}</span></div>`;
+      } else {
+        $('d-ticket-body').innerHTML=`<div class="kv"><span>Decision</span><span class="flat">${tk.decision||'WAIT'} — no position</span></div>
+          <div style="font-size:11px;color:var(--dim)">${tk.note||'Standing down.'}</div>`;
+      }}
+      break;
+    case 'logged':
+      $('dashStatus').innerHTML=`✅ Complete. Verdict #${data.verdict_id} logged (hash-chained).`;
+      break;
+  }
+}
+
+/* ══════════ SENTINEL TAB (SSE) ══════════ */
+function startSentinel(){
+  if(sentinelSource)sentinelSource.close();
+  $('sentinelAsset').textContent=currentSymbol;
+  $('sentinelStatus').innerHTML='<span class="spinner"></span>Starting...';
+  $('sentinelLog').innerHTML='';
+  $('sentinelTicket').innerHTML='<span class="dim">No ticket yet.</span>';
+  setSentinelState('WATCHING');
+  const btn=$('sentinelStartBtn');
+  btn.textContent='⏹ Stop Sentinel';btn.className='danger';btn.onclick=stopSentinel;
+  sentinelSource=new EventSource(`/api/sentinel_stream?symbol=${currentSymbol}`);
+  sentinelSource.onmessage=(e)=>{const msg=JSON.parse(e.data);handleSentinelEvent(msg.event,msg.data);};
+  sentinelSource.onerror=()=>{logSentinel('⚠️ Connection interrupted — will retry.','amber');};
+}
+function stopSentinel(){
+  if(sentinelSource){sentinelSource.close();sentinelSource=null}
+  const btn=$('sentinelStartBtn');
+  btn.textContent='▶ Start Sentinel';btn.className='primary';btn.onclick=startSentinel;
+  $('sentinelStatus').textContent='Stopped.';
+  setSentinelState('IDLE');
+  logSentinel('⏹ Sentinel stopped.','dim');
+}
+function setSentinelState(state){
+  const badge=$('sentinelStateBadge');
+  const map={WATCHING:['dim','WATCHING'],ARMED:['amber','ARMED'],TOUCHED:['blue','TOUCHED'],
+             CONFIRMED:['green','CONFIRMED'],BLACKOUT:['red','BLACKOUT'],IDLE:['dim','IDLE']};
+  const [cls,label]=map[state]||['dim',state];
+  badge.className='badge '+cls;badge.textContent=label;
+  ['WATCHING','ARMED','TOUCHED','CONFIRMED'].forEach(s=>{$('ss-'+s).className='pb-step';});
+  const order=['WATCHING','ARMED','TOUCHED','CONFIRMED'];
+  const idx=order.indexOf(state);
+  if(idx>=0){
+    for(let i=0;i<idx;i++)$('ss-'+order[i]).classList.add('passed');
+    const cur=$('ss-'+state);cur.classList.add('active');
+    if(state==='ARMED')cur.classList.add('armed');
+    if(state==='TOUCHED')cur.classList.add('touch');
+    if(state==='CONFIRMED')cur.classList.add('confirmed');
+  }
+}
+function logSentinel(msg,color){
+  const log=$('sentinelLog');
+  const time=new Date().toLocaleTimeString();
+  const div=document.createElement('div');
+  const cmap={green:'var(--green)',red:'var(--red)',amber:'var(--amber)',blue:'#58a6ff',magenta:'#bc8cff',dim:'var(--dim)'};
+  div.style.color=cmap[color]||'var(--txt)';
+  div.textContent=`[${time}] ${msg}`;
+  log.prepend(div);
+}
+function renderSentinelTicket(pipe){
+  const el=$('sentinelTicket');
+  const judge=pipe.judge||{};const tk=pipe.execution||{};
+  const vc=judge.decision==='FADE'?'pos':(judge.decision==='BREAK'?'neg':'flat');
+  if(!tk.direction||tk.direction==='FLAT'){
+    el.innerHTML=`<div class="kv"><span>Decision</span><span class="${vc}">${judge.decision||'WAIT'}</span></div>
+      <div style="font-size:12px;line-height:1.6;margin-top:6px">${judge.rationale||'No position.'}</div>`;
+    return;
+  }
+  const dc=tk.direction==='LONG'?'pos':'neg';
+  el.innerHTML=`
+    <div class="kv"><span>Decision</span><span class="${vc}">${judge.decision} ${tk.wall||''}</span></div>
+    <div class="kv"><span>Direction</span><span class="${dc}">${tk.direction}</span></div>
+    <div class="kv"><span>Entry</span><span>$${(+tk.entry).toLocaleString()}</span></div>
+    <div class="kv"><span>Stop</span><span class="neg">$${(+tk.stop_loss).toLocaleString()} (${tk.stop_ticks}t)</span></div>
+    <div class="kv"><span>T1</span><span class="pos">$${(+tk.target_1).toLocaleString()} (${tk.rr_target_1}R)</span></div>
+    <div class="kv"><span>T2</span><span class="pos">$${(+tk.target_2).toLocaleString()} (${tk.rr_target_2}R, ${tk.t2_source})</span></div>
+    <div style="font-size:12px;line-height:1.6;margin-top:8px">${judge.rationale||''}</div>`;
+}
+function handleSentinelEvent(event,data){
+  switch(event){
+    case 'started':
+      setSentinelState('WATCHING');
+      logSentinel(`🟢 Sentinel started — watching ${data.asset_key} → ${data.futures} (proximity ±${(data.proximity_pct*100).toFixed(1)}%)`,'green');
+      break;
+    case 'blackout':
+      setSentinelState('BLACKOUT');
+      logSentinel(`🚫 Calendar ${data.calendar.risk_level} — sentinel will not trade. ${data.calendar.guidance||''}`,'red');
+      stopSentinel();
+      break;
+    case 'walls':
+      logSentinel(`🧱 Walls set: Put $${fmtN(data.put_wall)} | Call $${fmtN(data.call_wall)} | ${data.regime} (${'net_gex' in data?(+data.net_gex).toExponential(2):''})`,'dim');
+      break;
+    case 'wall_migration':
+      (data.migrations||[]).forEach(m=>logSentinel(`↔ ${m.wall} wall migrated $${fmtN(m.old)} → $${fmtN(m.new)}`,'amber'));
+      break;
+    case 'status':
+      if(data.state&&data.state!=='WAITING')setSentinelState(data.state);
+      if(data.spot!=null)$('sentSpot').textContent='$'+(+data.spot).toLocaleString(undefined,{maximumFractionDigits:2});
+      if(data.put_dist!=null)$('sentPutDist').textContent=(+data.put_dist).toFixed(2)+'%';
+      if(data.call_dist!=null)$('sentCallDist').textContent=(+data.call_dist).toFixed(2)+'%';
+      if(data.nearest)$('sentNearest').textContent=data.nearest;
+      $('sentinelStatus').textContent=`${data.state||'WATCHING'} · spot $${(+data.spot).toFixed(2)}${data.armed?' · ARMED':''}`;
+      break;
+    case 'precursor':
+      setSentinelState('ARMED');
+      logSentinel(`⚠️ PRECURSOR: approaching ${data.wall} wall @ $${fmtN(data.wall_level)}${data.exec?` | NQ level ${(+data.exec).toFixed(0)} (${data.mode})`:''}`,'amber');
+      break;
+    case 'touch':
+      setSentinelState('TOUCHED');
+      logSentinel(`• TOUCH: at ${data.wall} wall (approach ${data.approach})${data.exec?` | NQ level ${(+data.exec).toFixed(0)} (${data.mode})`:''}`,'blue');
+      break;
+    case 'expired':
+      setSentinelState('WATCHING');
+      logSentinel(`○ No confirmation at ${data.wall} — stand down`,'dim');
+      break;
+    case 'confirmed':
+      setSentinelState('CONFIRMED');
+      logSentinel(`✅ CONFIRMED: ${data.confirmation} at ${data.wall} wall${data.exec?` | NQ level ${(+data.exec).toFixed(0)} (${data.mode})`:''} — running AI...`,'green');
+      break;
+    case 'pipeline_start':
+      logSentinel('🤖 Running AI pipeline (30-90s)...','magenta');
+      $('sentinelStatus').innerHTML='<span class="spinner"></span>AI pipeline running...';
+      break;
+    case 'pipeline_done':
+      renderSentinelTicket(data.pipeline);
+      logSentinel(`🎫 Ticket generated (verdict #${data.verdict_id})`,'green');
+      setSentinelState('WATCHING');
+      break;
+    case 'error':
+      logSentinel('❌ Error: '+data.message,'red');
+      break;
+    case 'done':
+      logSentinel('Sentinel finished.','dim');
+      break;
+  }
+}
+
+/* ── init — selectors wired IMMEDIATELY, then data ── */
+buildSelectors();
+loadAssets().then(()=>loadAll()).catch(()=>loadAll());
+setInterval(loadAll,20000);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.24
+rich>=13.0
+pyyaml>=6.0
+requests>=2.31
+openai>=1.30
+fastapi>=0.110
+uvicorn[standard]>=0.29
+slowapi>=0.1.9
+statsmodels>=0.14
