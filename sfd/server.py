@@ -1214,7 +1214,9 @@ def execute(payload: dict):
     if not ticket: return {"status": "error", "reason": "No ticket provided"}
     return execute_ticket(ticket, symbol)
 
+import os 
 if __name__ == "__main__":
-    print("\n  SFD Chart Terminal -> http://127.0.0.1:8321\n")
+    port = int(os.environ.get("PORT", 8321))
+    print(f"\n SFD Chart Terminal -> http://0.0.0.0:{port}\n")
     store.init()
-    uvicorn.run(app, host="127.0.0.1", port=8321, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
